@@ -1,0 +1,5 @@
+{
+  "name": "Format Rekap Absen SKTP",
+  "description": "A comprehensive application for managing teacher attendance, including monthly reports, teacher data management (CRUD), and a customizable calendar for holidays and work schedules. Features mass attendance input for efficiency.",
+  "requestFramePermissions": []
+}
