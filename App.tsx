@@ -6,6 +6,7 @@ import TeachersPage from './pages/TeachersPage';
 import CalendarPage from './pages/CalendarPage';
 import AttendancePage from './pages/AttendancePage';
 import WorkSchedulePage from './pages/WorkSchedulePage';
+import DashboardPage from './pages/DashboardPage';
 
 function App() {
   return (
@@ -13,6 +14,7 @@ function App() {
       <HashRouter>
         <Layout>
           <Routes>
+            <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/" element={<AttendancePage />} />
             <Route path="/teachers" element={<TeachersPage />} />
             <Route path="/work-schedule" element={<WorkSchedulePage />} />

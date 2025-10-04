@@ -104,15 +104,21 @@ const getInitialState = (): AppState => {
         const storedState = localStorage.getItem('attendanceApp');
         if (storedState) {
             const parsed = JSON.parse(storedState);
-             // Simple migration: if old data without workDays exists, add default workDays
-            if (parsed.teachers && parsed.teachers.length > 0 && parsed.teachers[0].workDays === undefined) {
-                parsed.teachers = parsed.teachers.map((t: Omit<Teacher, 'workDays'>) => ({
-                    ...t,
-                    workDays: [1, 2, 3, 4, 5], // Default Mon-Fri
-                }));
-            }
-            if (parsed.teachers && parsed.teachers.length > 0) {
-                 return parsed;
+
+            // By checking for the existence of the `teachers` property, we respect the user's
+            // choice to have an empty list of teachers, preventing the app from resetting
+            // to default data if all teachers are deleted.
+            if (parsed && typeof parsed.teachers !== 'undefined') {
+                // Robust migration: Ensure every teacher object has a valid `workDays` array.
+                // This handles cases where data from localStorage might be old or malformed,
+                // preventing crashes when `.includes()` is called on a non-array.
+                if (Array.isArray(parsed.teachers)) {
+                    parsed.teachers = parsed.teachers.map((teacher: any) => ({
+                        ...teacher,
+                        workDays: Array.isArray(teacher.workDays) ? teacher.workDays : [1, 2, 3, 4, 5],
+                    }));
+                }
+                return parsed;
             }
         }
 

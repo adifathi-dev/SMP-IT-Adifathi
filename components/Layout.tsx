@@ -1,8 +1,9 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { TableIcon, UsersIcon, CalendarIcon, ClockIcon } from './Icons';
+import { TableIcon, UsersIcon, CalendarIcon, ClockIcon, ChartBarIcon } from './Icons';
 
 const navItems = [
+  { path: '/dashboard', label: 'Dashboard Analis', icon: ChartBarIcon },
   { path: '/', label: 'Rekap Absensi', icon: TableIcon },
   { path: '/teachers', label: 'Data Guru', icon: UsersIcon },
   { path: '/work-schedule', label: 'Jadwal Kerja', icon: ClockIcon },
@@ -13,9 +14,15 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
 
   const getPageTitle = () => {
-    const currentNav = navItems.find(item => item.path === location.pathname);
+    // Handle exact match for root path
+    if (location.pathname === '/') {
+        return 'Rekap Absensi';
+    }
+    // Find the nav item that the current path starts with, for nested routes in future
+    const currentNav = navItems.find(item => item.path !== '/' && location.pathname.startsWith(item.path));
     return currentNav ? currentNav.label : 'Manajemen Absensi';
   };
+
 
   return (
     <div className="flex h-screen bg-gray-100 font-sans">
@@ -28,6 +35,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             <NavLink
               key={item.path}
               to={item.path}
+              end={item.path === '/'} // Use `end` prop for the root path to avoid it being active for all routes
               className={({ isActive }) =>
                 `flex items-center px-4 py-2.5 text-sm font-medium rounded-md transition-colors duration-200 ${
                   isActive

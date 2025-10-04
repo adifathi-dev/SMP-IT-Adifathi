@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { DayType, AttendanceStatus, AttendanceRecord, Teacher, CalendarDaySetting } from '../types';
-import { ChevronLeftIcon, ChevronRightIcon, CheckCircleIcon, HeartPulseIcon, FileTextIcon, XCircleIcon, SettingsIcon, PrinterIcon } from '../components/Icons';
+import { ChevronLeftIcon, ChevronRightIcon, CheckCircleIcon, HeartPulseIcon, FileTextIcon, XCircleIcon, SettingsIcon, PrinterIcon, DownloadIcon } from '../components/Icons';
 import Modal from '../components/Modal';
 
 // --- HELPER FUNCTIONS ---
@@ -497,23 +497,20 @@ const AttendancePage: React.FC = () => {
     }
 
     const monthlySummary = useMemo(() => {
-        const summary = { PRESENT: 0, SICK: 0, PERMIT: 0, ABSENT: 0 };
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        const summary = { PRESENT: 0, SICK: 0, PERMIT: 0, ABSENT: 0, presencePercentage: 0 };
+        let totalWorkDays = 0;
 
         state.teachers.forEach(teacher => {
-            for (let day = 1; day <= daysInMonth; day++) {
-                 const date = new Date(year, month, day);
-                 const isWorking = isTeacherWorkDay(teacher, date, state.calendarSettings);
-                 const record = getRecord(teacher.id, day);
-
-                if (record) {
-                    summary[record.status]++;
-                } else if (isWorking && date < today) {
-                    summary.ABSENT++;
-                }
-            }
+            const teacherSummary = getSummary(teacher);
+            summary.SICK += teacherSummary.S;
+            summary.PERMIT += teacherSummary.I;
+            summary.ABSENT += teacherSummary.A;
+            summary.PRESENT += teacherSummary.presentDays;
+            totalWorkDays += teacherSummary.workDays;
         });
+        
+        summary.presencePercentage = totalWorkDays > 0 ? Math.round((summary.PRESENT / totalWorkDays) * 100) : 0;
+        
         return summary;
     }, [state.teachers, daysInMonth, attendanceData, year, month, state.calendarSettings]);
 
@@ -536,6 +533,96 @@ const AttendancePage: React.FC = () => {
         setIndividualModalData({teacher, date});
     }
 
+    const handleExportCSV = () => {
+        const monthName = currentDate.toLocaleString('id-ID', { month: 'long' });
+        const year = currentDate.getFullYear();
+        const filename = `rekap_absen_${monthName.toLowerCase()}_${year}.csv`;
+
+        const escapeCsvCell = (cell: any): string => {
+            if (cell === null || cell === undefined) {
+                return '';
+            }
+            const cellString = String(cell);
+            if (/[",\n]/.test(cellString)) {
+                return `"${cellString.replace(/"/g, '""')}"`;
+            }
+            return cellString;
+        };
+        
+        const headers = [
+            'No', 'Nama Guru', 'Mata Pelajaran',
+            ...Array.from({ length: daysInMonth }, (_, i) => `${i + 1}`),
+            'Hari Kerja', 'Sakit (S)', 'Izin (I)', 'Alpha (A)', 'Hadir', '% Hadir',
+        ];
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const getCellCSVValue = (teacher: Teacher, day: number) => {
+            const date = new Date(year, month, day);
+            const isWorking = isTeacherWorkDay(teacher, date, state.calendarSettings);
+            if (!isWorking) return '';
+
+            const record = getRecord(teacher.id, day);
+            if (record) {
+                switch (record.status) {
+                    case AttendanceStatus.PRESENT:
+                        if (record.checkIn && record.checkOut) {
+                            return `${record.checkIn}-${record.checkOut}`;
+                        }
+                        return 'H'; // Fallback
+                    case AttendanceStatus.SICK:
+                        return 'S';
+                    case AttendanceStatus.PERMIT:
+                        return 'I';
+                    case AttendanceStatus.ABSENT:
+                        return 'A';
+                    default:
+                        return '';
+                }
+            } else if (date < today) {
+                // Only count past workdays as absent if no record exists
+                return 'A';
+            }
+            return '';
+        };
+
+        const rows = state.teachers.map((teacher, index) => {
+            const summary = getSummary(teacher);
+            const dailyStatuses = Array.from({ length: daysInMonth }, (_, i) => getCellCSVValue(teacher, i + 1));
+            return [
+                index + 1,
+                teacher.name,
+                teacher.subject,
+                ...dailyStatuses,
+                summary.workDays,
+                summary.S,
+                summary.I,
+                summary.A,
+                summary.presentDays,
+                summary.presencePercentage,
+            ].map(escapeCsvCell);
+        });
+
+        let csvContent = headers.map(escapeCsvCell).join(',') + '\n';
+        rows.forEach(rowArray => {
+            csvContent += rowArray.join(',') + '\n';
+        });
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        if (link.download !== undefined) {
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', filename);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+    };
+
     return (
         <>
             <div className="bg-white shadow-md rounded-lg p-6 print:hidden">
@@ -547,8 +634,8 @@ const AttendancePage: React.FC = () => {
                                 <CheckCircleIcon className="w-6 h-6 text-white" />
                             </div>
                             <div>
-                                <p className="text-sm text-green-800 font-medium">Total Hadir</p>
-                                <p className="text-2xl font-bold text-green-900">{monthlySummary.PRESENT}</p>
+                                <p className="text-sm text-green-800 font-medium">Persentase Kehadiran</p>
+                                <p className="text-2xl font-bold text-green-900">{monthlySummary.presencePercentage}%</p>
                             </div>
                         </div>
                         <div className="bg-blue-100 p-4 rounded-lg flex items-center shadow">
@@ -590,12 +677,14 @@ const AttendancePage: React.FC = () => {
                         <button onClick={() => changeMonth(1)} className="p-2 rounded-full hover:bg-gray-200"><ChevronRightIcon /></button>
                     </div>
                     <div className="flex items-center space-x-2">
-                        <button onClick={() => setPrintSettingsModalOpen(true)} className="flex items-center px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 shadow-sm">
-                            <SettingsIcon className="w-5 h-5 mr-2" />
-                            Atur Cetak
+                        <button onClick={() => setPrintSettingsModalOpen(true)} className="p-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 shadow-sm" title="Atur Cetak">
+                            <SettingsIcon className="w-5 h-5" />
                         </button>
-                        <button onClick={handlePrint} className="p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 shadow-sm">
+                        <button onClick={handlePrint} className="p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 shadow-sm" title="Cetak Laporan">
                             <PrinterIcon className="w-5 h-5" />
+                        </button>
+                         <button onClick={handleExportCSV} className="p-2 bg-green-600 text-white rounded-md hover:bg-green-700 shadow-sm" title="Export ke CSV">
+                            <DownloadIcon className="w-5 h-5" />
                         </button>
                         <button onClick={() => setMassModalOpen(true)} className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 shadow-sm">
                             Input Absensi Massal
